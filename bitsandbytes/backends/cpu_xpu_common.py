@@ -60,7 +60,7 @@ def _ipex_xpu_version_prereq(major, minor):
 
 def _maybe_torch_compile(func):
     # torch.compile requires g++ and pytorch >= 2.0
-    if gxx_available and _torch_version_prereq(2, 0) and not ipex_xpu:
+    if gxx_available and _torch_version_prereq(2, 0) and ipex_cpu_only:
         options = {}
         # fx_graph_cache requires pytorch >= 2.2
         if _torch_version_prereq(2, 2):
@@ -369,8 +369,9 @@ def quantize_4bit_impl(
             out_uint8[abs_scaled_A > key] = val
         out_uint8 += sign.to(torch.uint8) * 8
     elif quant_type == "int8":
-        for i in range(len(INT8_QUANT_TABLE)):
-            out_uint8[scaled_A > INT8_QUANT_TABLE[i]] = i
+        map = torch.tensor(INT8_QUANT_TABLE, device=scaled_A.device)
+        diff = torch.abs(scaled_A.unsqueeze(-1) - map)
+        out_uint8 = torch.argmin(diff, dim=-1).to(torch.uint8).to(scaled_A.device)
 
     if quant_type == "int8":
         out = out_uint8
